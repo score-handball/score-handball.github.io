@@ -469,9 +469,11 @@ function removeExcl(i, id) {
   S.teams[i].excl = S.teams[i].excl.filter(x => x.id !== id);
   save(); render();
 }
+// Règle : 3 temps morts max par match, 2 max par mi-temps
+const ttoAllowed = t => t.tto.length < 3 && t.tto.filter(p => p === S.period).length < 2;
 function teamTimeout(i) {
   const t = S.teams[i];
-  if (t.tto.length >= 3 || S.timeout) return;
+  if (!ttoAllowed(t) || S.timeout) return;
   tick();
   snapshot();
   S.running = false;
@@ -565,7 +567,9 @@ function render() {
     $('.dot', sec).style.background = t.color;
     renderSeg($('.score .seg', sec), String(t.score));
     sec.querySelectorAll('.tm-dots i').forEach((d, k) => d.classList.toggle('used', k < t.tto.length));
-    $('[data-act="tto"]', sec).disabled = t.tto.length >= 3;
+    const ttoBtn = $('[data-act="tto"]', sec);
+    ttoBtn.disabled = !ttoAllowed(t);
+    ttoBtn.title = t.tto.length >= 3 ? '3 temps morts déjà pris dans le match' : (ttoBtn.disabled ? '2 temps morts déjà pris dans cette mi-temps' : 'Temps mort d\'équipe');
     $('[data-act="minus"]', sec).disabled = t.score === 0;
   });
   $('#periodBtn').textContent = PERIODS[S.period].label;

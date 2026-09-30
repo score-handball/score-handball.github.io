@@ -14,6 +14,6 @@ Ouvrir l'appli une fois avec internet ; ensuite elle fonctionne sans réseau.
 - Chrono (croissant ou décroissant), durée des mi-temps et des prolongations personnalisable, jets de 7 m
 - Scores en afficheur 7 segments, −1 et annulation
 - Exclusions 2 minutes avec décompte
-- Temps morts d'équipe (3 par équipe, décompte 1 min)
+- Temps morts d'équipe : 3 par match, 2 max par mi-temps, décompte 1 min
 - Klaxon et sifflet
 - Feuille de match copiable, noms et couleurs des équipes
