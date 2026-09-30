@@ -11,7 +11,7 @@ Tableau des scores de handball installable sur iPhone et Android (web app / PWA)
 Ouvrir l'appli une fois avec internet ; ensuite elle fonctionne sans réseau.
 
 ## Fonctions
-- Chrono (croissant ou décroissant), mi-temps de 15 à 30 min, prolongations, jets de 7 m
+- Chrono (croissant ou décroissant), durée des mi-temps et des prolongations personnalisable, jets de 7 m
 - Scores en afficheur 7 segments, −1 et annulation
 - Exclusions 2 minutes avec décompte
 - Temps morts d'équipe (3 par équipe, décompte 1 min)
