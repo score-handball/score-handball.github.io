@@ -178,8 +178,14 @@ input[type="text"], input[type="number"] {
 .btn.danger.armed { background: var(--seg-clock); color: #fff; }
 .toggle { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; font-size: 19px; }
 .toggle input { width: 22px; height: 22px; accent-color: var(--seg-score); }
+.chart { width: 100%; height: auto; display: block; font-family: var(--font-ui); }
+.chart .axis { stroke: var(--line); stroke-width: 1; }
+.chart .ht { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 4; }
+.chart text { fill: var(--muted); font-size: 13px; }
+.chart .end { font-size: 16px; font-weight: 700; }
+.chart-stats { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 6px; }
 .log { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 40vh; overflow: auto; font-variant-numeric: tabular-nums; }
-.log li { display: grid; grid-template-columns: 4.2em 3.2em 1fr auto; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--line); align-items: center; }
+.log li { display: grid; grid-template-columns: auto auto 1fr auto; white-space: nowrap; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--line); align-items: center; }
 .log .t { color: var(--muted); }
 .log .sc { font-weight: 700; }
 .muted { color: var(--muted); font-size: 16px; line-height: 1.4; margin: 0; }
@@ -291,6 +297,10 @@ input[type="text"], input[type="number"] {
       <div class="row" style="margin-top:6px"><button class="btn" id="fsBtn">Plein écran</button></div>
     </div>
     <div>
+      <h3>Évolution du score</h3>
+      <div id="chart"></div>
+    </div>
+    <div>
       <h3>Feuille de match</h3>
       <ul class="log" id="log"></ul>
       <div class="row" style="margin-top:10px"><button class="btn" id="copyBtn">Copier le résumé</button><span class="muted" id="copyMsg"></span></div>
@@ -329,7 +339,7 @@ const fresh = () => ({
     { name: 'Rouge', color: '#e53935', score: 0, tto: [], excl: [] },
     { name: 'Bleu', color: '#1e6fff', score: 0, tto: [], excl: [] },
   ],
-  period: 0, periodMin: 30, otMin: 5, dir: 'up',
+  period: 0, periodMin: 30, otMin: 5, dir: 'up', warn1: false,
   elapsed: 0, running: false, lastTick: 0,
   timeout: null, log: [], periodScores: [],
   settings: { sound: true, vibrate: true, wake: true },
@@ -340,11 +350,14 @@ S = Object.assign(fresh(), S);
 const undoStack = [];
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
 
-const periodMs = () => {
-  const p = PERIODS[S.period];
+const periodMsOf = i => {
+  const p = PERIODS[i];
   const min = p.ot ? S.otMin : (p.min !== undefined ? p.min : S.periodMin);
   return Math.round(min * 60000);
 };
+const periodMs = () => periodMsOf(S.period);
+// Remet l'alerte « 1 minute » si le temps restant repasse au-dessus d'une minute
+const resetWarn = () => { if (periodMs() - S.elapsed > 60000) S.warn1 = false; };
 const fmt = ms => {
   const s = Math.max(0, Math.ceil(ms / 1000 - 1e-6));
   return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
@@ -437,7 +450,7 @@ document.addEventListener('visibilitychange', () => { tick(); syncWake(); });
 
 /* ---------- actions ---------- */
 const snapshot = () => undoStack.push(JSON.stringify({ teams: S.teams, log: S.log }));
-const addLog = (team, kind) => S.log.push({ team, kind, time: matchTime(), period: S.period, score: S.teams[0].score + '–' + S.teams[1].score });
+const addLog = (team, kind) => S.log.push({ team, kind, time: matchTime(), ms: S.elapsed, period: S.period, score: S.teams[0].score + '–' + S.teams[1].score });
 
 function toggleClock() {
   if (S.timeout) return;
@@ -469,15 +482,28 @@ function removeExcl(i, id) {
   S.teams[i].excl = S.teams[i].excl.filter(x => x.id !== id);
   save(); render();
 }
-// Règle : 3 temps morts max par match, 2 max par mi-temps
-const ttoAllowed = t => t.tto.length < 3 && t.tto.filter(p => p === S.period).length < 2;
+// Règles officielles des temps morts d'équipe. Ancien format : numéro de période seul.
+const ttoP = x => typeof x === 'number' ? x : x.p;
+const ttoMs = x => typeof x === 'number' ? 0 : x.ms;
+function ttoBlock(t) {
+  const p = PERIODS[S.period];
+  if (p.ot) return 'Pas de temps mort pendant les prolongations';
+  if (p.min === 0) return 'Pas de temps mort pendant les jets de 7 m';
+  if (t.tto.length >= 3) return '3 temps morts déjà pris dans le match';
+  if (t.tto.filter(x => ttoP(x) === S.period).length >= 2) return '2 temps morts déjà pris dans cette mi-temps';
+  const last5 = periodMs() - 300000;
+  if (S.period === 1 && S.elapsed >= last5 && t.tto.some(x => ttoP(x) === 1 && ttoMs(x) >= last5))
+    return 'Un seul temps mort dans les 5 dernières minutes';
+  return '';
+}
+const ttoAllowed = t => !ttoBlock(t);
 function teamTimeout(i) {
   const t = S.teams[i];
   if (!ttoAllowed(t) || S.timeout) return;
   tick();
   snapshot();
   S.running = false;
-  t.tto.push(S.period);
+  t.tto.push({ p: S.period, ms: S.elapsed });
   S.timeout = { team: i, endsAt: Date.now() + 60000, warned: false };
   addLog(i, 'tto');
   whistle();
@@ -494,13 +520,13 @@ function setPeriod(p) {
   if (p < 0 || p >= PERIODS.length || p === S.period) return;
   tick();
   if (p > S.period) S.periodScores[S.period] = [S.teams[0].score, S.teams[1].score];
-  S.period = p; S.elapsed = 0; S.running = false;
+  S.period = p; S.elapsed = 0; S.running = false; S.warn1 = false;
   save(); render();
 }
 function adjustClock(delta) {
   tick();
   S.elapsed = Math.min(periodMs(), Math.max(0, S.elapsed + (S.dir === 'up' ? delta : -delta)));
-  save(); render();
+  resetWarn(); save(); render();
 }
 
 /* ---------- clock loop ---------- */
@@ -513,6 +539,9 @@ function tick() {
     const step = Math.min(dt, room);
     S.elapsed += step;
     S.lastTick = now;
+    if (!S.warn1 && periodMs() > 60000 && periodMs() - S.elapsed <= 60000 && S.elapsed < periodMs()) {
+      S.warn1 = true; beep(1000, .15, 2);
+    }
     S.teams.forEach((t, i) => {
       const before = t.excl.length;
       t.excl.forEach(x => { x.remain -= step; });
@@ -567,9 +596,6 @@ function render() {
     $('.dot', sec).style.background = t.color;
     renderSeg($('.score .seg', sec), String(t.score));
     sec.querySelectorAll('.tm-dots i').forEach((d, k) => d.classList.toggle('used', k < t.tto.length));
-    const ttoBtn = $('[data-act="tto"]', sec);
-    ttoBtn.disabled = !ttoAllowed(t);
-    ttoBtn.title = t.tto.length >= 3 ? '3 temps morts déjà pris dans le match' : (ttoBtn.disabled ? '2 temps morts déjà pris dans cette mi-temps' : 'Temps mort d\'équipe');
     $('[data-act="minus"]', sec).disabled = t.score === 0;
   });
   $('#periodBtn').textContent = PERIODS[S.period].label;
@@ -582,6 +608,7 @@ function render() {
   if (S.timeout) $('#ttoTitle').textContent = 'Temps mort ' + S.teams[S.timeout.team].name;
   renderStatus();
   renderMenu();
+  if (!$('#menuSheet').hidden) renderChart();
   renderLive(true);
 }
 
@@ -615,6 +642,11 @@ function renderLive(force) {
     if (box.dataset.h !== html) { box.innerHTML = html; box.dataset.h = html; }
   });
   if (S.timeout) renderSeg($('#ttoSeg'), fmt(S.timeout.endsAt - Date.now()));
+  // La règle des 5 dernières minutes dépend du chrono : on réévalue en continu
+  S.teams.forEach((t, i) => {
+    const btn = $(`.team[data-t="${i}"] [data-act="tto"]`), why = ttoBlock(t);
+    if (btn.title !== (why || 'Temps mort d\'équipe')) { btn.disabled = !!why; btn.title = why || 'Temps mort d\'équipe'; }
+  });
   renderStatus();
 }
 
@@ -646,6 +678,74 @@ function renderMenu() {
 function openSheet(id) {
   renderMenu();
   $('#' + id).hidden = false;
+  if (id === 'menuSheet') renderChart();
+}
+
+/* ---------- graphique du match ---------- */
+const logMs = l => l.ms !== undefined ? l.ms : (+l.time.slice(0, 2) * 60 + +l.time.slice(3)) * 1000;
+const offsetOf = p => { let o = 0; for (let q = 0; q < p; q++) o += periodMsOf(q); return o; };
+const lineColor = c => c === '#111111' ? '#8a939b' : c;
+function renderChart() {
+  const box = $('#chart');
+  const ev = S.log.filter(l => l.kind === 'goal' || l.kind === 'minus').map(l => {
+    const [a, b] = l.score.split('–').map(Number);
+    return { t: offsetOf(l.period) + logMs(l), a, b, team: l.team, kind: l.kind };
+  });
+  if (!ev.length) { box.innerHTML = '<p class="muted">Le graphique apparaîtra dès le premier but.</p>'; return; }
+
+  const now = offsetOf(S.period) + S.elapsed;
+  const span = Math.max(periodMsOf(0) + periodMsOf(1), now, ev[ev.length - 1].t, 60000);
+  const top = Math.max(5, ...ev.map(e => Math.max(e.a, e.b)));
+  // Largeur réelle du bloc : le texte reste lisible en portrait comme en paysage
+  const W = Math.max(300, Math.round(box.clientWidth) || 520), H = 210, L = 30, R = 46, T = 20, B = 26;
+  const x = t => L + (t / span) * (W - L - R);
+  const y = v => H - B - (v / top) * (H - T - B);
+
+  let g = '';
+  const yStep = top > 30 ? 10 : 5;
+  for (let v = 0; v <= top; v += yStep) g += `<line class="axis" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  const spanMin = span / 60000, xStep = spanMin > 40 ? 10 : 5;
+  for (let m = 0; m <= spanMin + 0.01; m += xStep) g += `<text x="${x(m * 60000)}" y="${H - 6}" text-anchor="middle">${m}'</text>`;
+  const ht = periodMsOf(0);
+  if (ht < span) g += `<line class="ht" x1="${x(ht)}" x2="${x(ht)}" y1="${T}" y2="${H - B}"/><text x="${x(ht) + 4}" y="${T + 10}">MT</text>`;
+
+  const sameColor = S.teams[0].color === S.teams[1].color;
+  const endT = Math.max(now, ev[ev.length - 1].t);
+  const labels = [];
+  [0, 1].forEach(k => {
+    const val = e => k === 0 ? e.a : e.b;
+    let d = `M${x(0)},${y(0)}`;
+    ev.forEach(e => { d += ` H${x(e.t).toFixed(1)} V${y(val(e)).toFixed(1)}`; });
+    d += ` H${x(endT).toFixed(1)}`;
+    const col = lineColor(S.teams[k].color), last = val(ev[ev.length - 1]);
+    g += `<path d="${d}" fill="none" stroke="${col}" stroke-width="3" stroke-linejoin="round"${sameColor && k ? ' stroke-dasharray="6 4"' : ''}/>`;
+    g += `<circle cx="${x(endT)}" cy="${y(last)}" r="4.5" fill="${col}"/>`;
+    labels.push({ y: y(last), v: last, col });
+  });
+  // Écarte les deux étiquettes finales si les scores sont proches
+  if (Math.abs(labels[0].y - labels[1].y) < 16) {
+    const mid = (labels[0].y + labels[1].y) / 2, up = labels[0].v >= labels[1].v ? 0 : 1;
+    labels[up].y = mid - 8; labels[1 - up].y = mid + 8;
+  }
+  const minY = Math.min(labels[0].y, labels[1].y);
+  if (minY < T - 4) labels.forEach(l => { l.y += T - 4 - minY; });
+  labels.forEach(l => { g += `<text class="end" x="${x(endT) + 9}" y="${l.y + 5}" style="fill:${l.col}">${l.v}</text>`; });
+
+  // Plus gros écart et meilleure série
+  const lead = [0, 0];
+  ev.forEach(e => { lead[0] = Math.max(lead[0], e.a - e.b); lead[1] = Math.max(lead[1], e.b - e.a); });
+  let run = { team: -1, n: 0 }, best = { team: -1, n: 0 };
+  ev.forEach(e => {
+    if (e.kind !== 'goal') { run = { team: -1, n: 0 }; return; }
+    run = run.team === e.team ? { team: e.team, n: run.n + 1 } : { team: e.team, n: 1 };
+    if (run.n > best.n) best = { ...run };
+  });
+  const nm = k => esc(S.teams[k].name);
+  const leadTxt = [0, 1].filter(k => lead[k] > 0).map(k => `${nm(k)} +${lead[k]}`).join(', ') || 'aucun';
+  const bestTxt = best.n >= 2 ? `${nm(best.team)}, ${best.n} buts d'affilée` : '—';
+
+  box.innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Évolution du score">${g}</svg>
+    <div class="chart-stats muted"><span>Plus gros écart : ${leadTxt}</span><span>Meilleure série : ${bestTxt}</span></div>`;
 }
 document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
   if (o.id === 'ttoSheet') return;
@@ -674,7 +774,7 @@ const applyDuration = () => {
   const m = Math.min(90, Math.max(0, parseInt($('#durMin').value, 10) || 0));
   const s = Math.min(59, Math.max(0, parseInt($('#durSec').value, 10) || 0));
   if (m * 60 + s < 10) { renderMenu(); return; }
-  tick(); S.periodMin = m + s / 60; S.elapsed = Math.min(S.elapsed, periodMs()); save(); render();
+  tick(); S.periodMin = m + s / 60; S.elapsed = Math.min(S.elapsed, periodMs()); resetWarn(); save(); render();
 };
 $('#durMin').addEventListener('change', applyDuration);
 $('#durSec').addEventListener('change', applyDuration);
@@ -694,7 +794,7 @@ $('#fsBtn').onclick = () => {
   try { (d.requestFullscreen || d.webkitRequestFullscreen).call(d).catch(() => {}); } catch (e) {}
 };
 $('#clockAdjust').addEventListener('click', e => { const b = e.target.closest('[data-adj]'); if (b) adjustClock(+b.dataset.adj); });
-$('#swapBtn').onclick = () => { snapshot(); S.teams.reverse(); S.log.forEach(l => { l.team = 1 - l.team; }); if (S.timeout) S.timeout.team = 1 - S.timeout.team; save(); render(); };
+$('#swapBtn').onclick = () => { snapshot(); S.teams.reverse(); S.log.forEach(l => { l.team = 1 - l.team; l.score = l.score.split('–').reverse().join('–'); }); S.periodScores.forEach(p => p && p.reverse()); if (S.timeout) S.timeout.team = 1 - S.timeout.team; save(); render(); };
 $('#teamEdit').addEventListener('input', e => {
   const i = e.target.dataset.name; if (i === undefined) return;
   S.teams[+i].name = e.target.value.trim() || (+i ? 'Bleu' : 'Rouge'); save();
@@ -736,6 +836,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight') goal(1, 1);
 });
 document.addEventListener('pointerdown', () => { syncWake(); }, { once: true });
+window.addEventListener('resize', () => { if (!$('#menuSheet').hidden) renderChart(); });
 
 render();
 loop();
