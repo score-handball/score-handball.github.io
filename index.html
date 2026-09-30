@@ -175,6 +175,11 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--amber); out
   .phase { letter-spacing: .1em; font-size: 14px; }
   .status { max-width: 70vw; }
   .ctrl { left: auto; right: 14px; bottom: auto; top: max(12px, env(safe-area-inset-top)); transform: none; }
+  /* Pastilles et commandes du côté du pouce (réglage « Main ») */
+  body.hand-right .team .tools { justify-content: flex-end; }
+  body.hand-right .team .head { align-items: flex-start; }
+  body.hand-left .ctrl { right: auto; left: 14px; }
+  body.hand-left .team .head { align-items: flex-end; }
 }
 
 /* ---------- panneaux ---------- */
@@ -319,6 +324,9 @@ input[type="text"], input[type="number"] {
     </div>
     <div>
       <h3>Réglages</h3>
+      <div class="toggle">Main qui tient le téléphone (portrait)
+        <div class="seg-ctl" id="handCtl"><button data-hand="left">Gauche</button><button data-hand="right">Droite</button></div>
+      </div>
       <label class="toggle">Sons (fin de période, temps mort, fin des 2 min)<input type="checkbox" id="optSound"></label>
       <label class="toggle">Vibration à chaque but<input type="checkbox" id="optVibrate"></label>
       <label class="toggle">Garder l'écran allumé<input type="checkbox" id="optWake"></label>
@@ -370,7 +378,7 @@ const fresh = () => ({
   period: 0, periodMin: 30, otMin: 5, dir: 'up', warn1: false,
   elapsed: 0, running: false, lastTick: 0,
   timeout: null, log: [], periodScores: [],
-  settings: { sound: true, vibrate: true, wake: true },
+  settings: { sound: true, vibrate: true, wake: true, hand: 'right' },
 });
 let S;
 try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fresh(); }
@@ -693,6 +701,10 @@ function renderMenu() {
   $('#optSound').checked = S.settings.sound;
   $('#optVibrate').checked = S.settings.vibrate;
   $('#optWake').checked = S.settings.wake;
+  const hand = S.settings.hand || 'right';
+  document.querySelectorAll('#handCtl button').forEach(b => b.setAttribute('aria-pressed', hand === b.dataset.hand));
+  document.body.classList.toggle('hand-right', hand === 'right');
+  document.body.classList.toggle('hand-left', hand === 'left');
   $('#log').innerHTML = S.log.length
     ? S.log.slice().reverse().map(l => `<li><span class="t">${PERIODS[l.period].label} ${l.time}</span><span class="sc">${l.score}</span><span>${KIND[l.kind]}</span><span style="color:${esc(S.teams[l.team].color)}">${esc(S.teams[l.team].name)}</span></li>`).join('')
     : '<li><span class="muted" style="grid-column:1/-1">Les buts, exclusions et temps morts apparaîtront ici.</span></li>';
@@ -811,6 +823,10 @@ $('#otMin').addEventListener('change', () => {
 $('#dirCtl').addEventListener('click', e => {
   const b = e.target.closest('[data-dir]'); if (!b) return;
   S.dir = b.dataset.dir; save(); render();
+});
+$('#handCtl').addEventListener('click', e => {
+  const b = e.target.closest('[data-hand]'); if (!b) return;
+  S.settings.hand = b.dataset.hand; save(); render();
 });
 ['sound', 'vibrate', 'wake'].forEach(k => {
   $('#opt' + k[0].toUpperCase() + k.slice(1)).onchange = e => { S.settings[k] = e.target.checked; save(); syncWake(); };

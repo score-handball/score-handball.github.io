@@ -14,6 +14,7 @@ Ouvrir l'appli une fois avec internet ; ensuite elle fonctionne sans réseau.
 - Chrono (croissant ou décroissant), durée des mi-temps et des prolongations personnalisable, jets de 7 m
 - Écran coupé en deux aux couleurs des équipes : toucher sa moitié pour marquer, −1 et annulation
 - Toucher le nom d'une équipe pour changer son nom et sa couleur
+- En portrait, réglage main droite / main gauche pour avoir les boutons sous le pouce
 - Exclusions 2 minutes avec décompte
 - Temps morts d'équipe selon les règles officielles : 3 par match, 2 max par mi-temps, 1 seul dans les 5 dernières minutes, aucun en prolongation ; décompte 1 min
 - Double bip à 1 minute de la fin de chaque période

@@ -1,5 +1,5 @@
 // Réseau d'abord (pour recevoir les mises à jour), cache si hors ligne ou réseau trop lent.
-const CACHE = 'hb-score-v6';
+const CACHE = 'hb-score-v7';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
