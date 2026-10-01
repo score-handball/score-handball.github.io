@@ -380,6 +380,17 @@ const fresh = () => ({
   timeout: null, log: [], periodScores: [],
   settings: { sound: true, vibrate: true, wake: true, hand: 'right' },
 });
+// Reprise du match transmis par l'ancienne adresse (kgeogeo.github.io/score-handball) :
+// importé seulement s'il n'y a encore rien sur cette adresse, puis retiré du lien.
+(() => {
+  const m = location.hash.match(/^#import=(.+)$/);
+  if (!m) return;
+  try {
+    const data = JSON.parse(decodeURIComponent(m[1]));
+    if (data && Array.isArray(data.teams) && !localStorage.getItem(KEY)) localStorage.setItem(KEY, JSON.stringify(data));
+  } catch (e) {}
+  history.replaceState(null, '', location.pathname + location.search);
+})();
 let S;
 try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fresh(); }
 S = Object.assign(fresh(), S);

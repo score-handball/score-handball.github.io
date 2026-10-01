@@ -2,7 +2,7 @@
 
 Tableau des scores de handball installable sur iPhone et Android (web app / PWA), utilisable hors ligne.
 
-**Ouvrir l'appli :** https://kgeogeo.github.io/score-handball/
+**Ouvrir l'appli :** https://score-handball.github.io/
 
 ## Installer
 - **iPhone** : ouvrir le lien dans Safari → Partager → « Sur l'écran d'accueil ».
